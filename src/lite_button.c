@@ -188,7 +188,7 @@ void lite_button_init(key_id_e id, btn_gpio_lv_f gpio_cb,
     g_btn_list[id].cfg.lp_thr = cfg->longpress_ms / BTN_POLL_PERIOD_MS;
     g_btn_list[id].cfg.lp_rpt_thr = cfg->longpress_repeat_ms / BTN_POLL_PERIOD_MS;
 
-    g_btn_list[id].state = 0;
+    g_btn_list[id].state = BTN_IDLE_LEVEL;
     g_btn_list[id].deb_cnt = 0;
     g_btn_list[id].lp_cnt = 0;
     g_btn_list[id].click_cnt = 0;
