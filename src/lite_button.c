@@ -20,10 +20,10 @@
 
 #include "lite_button.h"
 
-static size_t btn_tmr_tick = 0;
+static size_t g_btn_tmr_tick = 0;
 static size_t g_btn_combo_num = 0;
 static uint32_t g_btn_press_mask = 0;
-static btn_t g_btn_list[BTN_NUM] = {0};
+static btn_dev_t g_btn_list[BTN_NUM] = {0};
 static btn_combo_t g_btn_combo_list[BTN_COMBO_NUM] = {0};
 
 #if BTN_COMBO_FUN_ENABLE
@@ -46,6 +46,8 @@ static size_t lite_button_combo_tick_diff(key_id_e *keys, btn_combo_num_e num)
 static void lite_button_combo_handle(void)
 {
     btn_combo_t *combo = NULL;
+
+    if (HAS_MULTI_BITS(g_btn_press_mask) == 0) return;
 
     for (size_t i = 0; i < BTN_COMBO_NUM; i++) {
         combo = &g_btn_combo_list[i];
@@ -71,10 +73,10 @@ static void lite_button_combo_handle(void)
 #endif
 
 #if BTN_MULTICLICK_FUN_ENABLE
-static void lite_button_multi_click_handle(btn_t *btn)
+static void lite_button_multi_click_handle(btn_dev_t *btn)
 {
-    uint32_t interval = (btn_tmr_tick > btn->rel_tick)?
-                        (btn_tmr_tick - btn->rel_tick) : (0xFFFFFFFF - btn->rel_tick + btn_tmr_tick);
+    uint32_t interval = (g_btn_tmr_tick >= btn->rel_tick)?
+                        (g_btn_tmr_tick - btn->rel_tick) : (0xFFFFFFFF - btn->rel_tick + g_btn_tmr_tick);
 
     if(interval <= BTN_MULTI_GAP_THR) {
         btn->click_cnt++;
@@ -93,7 +95,7 @@ static void lite_button_multi_click_handle(btn_t *btn)
 #endif
 
 #if BTN_LONGPRESS_FUN_ENABLE
-static void lite_button_long_press_handle(btn_t *btn)
+static void lite_button_long_press_handle(btn_dev_t *btn)
 {
     if (btn->lp_cnt == 0) return;
     if (btn->state == BTN_IDLE_LEVEL) return;
@@ -108,10 +110,10 @@ static void lite_button_long_press_handle(btn_t *btn)
 
 void lite_button_poll_handle(void)
 {
-    btn_t *btn = NULL;
+    btn_dev_t *btn = NULL;
     btn_level_e cur_lv = BTN_IDLE_LEVEL;
 
-    btn_tmr_tick++;
+    g_btn_tmr_tick++;
     for(size_t i = 0; i < BTN_NUM; i++) {
         btn = &g_btn_list[i];
         if (btn->cb == NULL || btn->gpio_cb == NULL) continue;
@@ -131,18 +133,18 @@ void lite_button_poll_handle(void)
                 // button press
                 if(btn->state == BTN_ACTIVE_LEVEL) {
                     g_btn_press_mask |= BIT(i);
-                    btn->prs_tick = btn_tmr_tick;
+                    btn->prs_tick = g_btn_tmr_tick;
                     btn->cb(BTN_EVT_PRESS, btn->cb_para);
                 }
                 // button release
                 if(btn->state != BTN_ACTIVE_LEVEL) {
                     g_btn_press_mask &= ~BIT(i);
-                    btn->rel_tick = btn_tmr_tick;
 #if BTN_MULTICLICK_FUN_ENABLE
                     lite_button_multi_click_handle(btn);
 #else
                     btn->cb(BTN_EVT_RELEASE, btn->cb_para);
 #endif
+                    btn->rel_tick = g_btn_tmr_tick;
                 }
             }
         }
