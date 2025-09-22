@@ -48,6 +48,7 @@ extern "C" {
         ( ((ABS_DIFF(a, b)) > (ABS_DIFF(a, c))) ? \
         ( ((ABS_DIFF(a, b)) > (ABS_DIFF(b, c))) ? ABS_DIFF(a, b) : ABS_DIFF(b, c) ) : \
         ( ((ABS_DIFF(a, c)) > (ABS_DIFF(b, c))) ? ABS_DIFF(a, c) : ABS_DIFF(b, c) ) )
+#define HAS_MULTI_BITS(x)   (((x) & ((x) - 1)) != 0)
 
 typedef enum {
     BTN_LEVEL_LOW = 0,
@@ -120,7 +121,7 @@ typedef struct {
     size_t rel_tick;
     size_t click_cnt;
     btn_level_e state;
-} btn_t;
+} btn_dev_t;
 
 /*==============================================================================
  * API functions
