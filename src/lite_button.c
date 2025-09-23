@@ -212,8 +212,8 @@ void lite_button_exti_trigger(key_id_e i)
 {
     BTN_HW_INTERRUPT_DISABLE();
     g_btn_exti_mask |= BIT(i);
-    lite_button_timer_start(BTN_POLL_PERIOD_MS);
     BTN_HW_INTERRUPT_ENABLE();
+    lite_button_timer_start(BTN_POLL_PERIOD_MS);
     g_btn_timer_handle.exti_tick = g_btn_tmr_tick;
 }
 #endif
