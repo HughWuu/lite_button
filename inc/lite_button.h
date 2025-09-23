@@ -49,6 +49,10 @@ extern "C" {
         ( ((ABS_DIFF(a, b)) > (ABS_DIFF(b, c))) ? ABS_DIFF(a, b) : ABS_DIFF(b, c) ) : \
         ( ((ABS_DIFF(a, c)) > (ABS_DIFF(b, c))) ? ABS_DIFF(a, c) : ABS_DIFF(b, c) ) )
 #define HAS_MULTI_BITS(x)   (((x) & ((x) - 1)) != 0)
+#define MIN(a, b) ((a) < (b) ? (a) : (b))
+#define MAX(a, b) ((a) > (b) ? (a) : (b))
+#define GET_INTERVAL(cur, prev) \
+        ((cur) >= (prev) ? ((cur) - (prev)) : (SIZE_MAX - (prev) + (cur)))
 
 typedef enum {
     BTN_LEVEL_LOW = 0,
@@ -68,6 +72,23 @@ typedef enum {
 typedef btn_level_e (*btn_gpio_lv_f)(void);
 typedef void (*btn_cb_f)(btn_evt_e evt, void *user);
 typedef void (*btn_combo_cb_f)(key_combo_id_e, void *para);
+
+typedef void (*btn_timer_callback_cb_f)(void);
+typedef void (*btn_timer_creat_cb_f)(btn_timer_callback_cb_f cb);
+typedef void (*btn_timer_start_cb_f)(uint32_t ms);
+typedef void (*btn_timer_stop_cb_f)(void);
+
+typedef struct {
+    btn_timer_creat_cb_f creat;
+    btn_timer_start_cb_f start;
+    btn_timer_stop_cb_f stop;
+} btn_timer_cb_t;
+
+typedef struct {
+    btn_timer_cb_t cb;
+    bool run_flag;
+    uint32_t exti_tick;
+} btn_timer_t;
 
 typedef enum {
     BTN_COMBO_NONE = 0,
@@ -139,6 +160,7 @@ typedef struct {
 void lite_button_init(key_id_e id, btn_gpio_lv_f gpio_cb,
                       const btn_cfg_t *cfg, btn_cb_f cb, void *para);
 
+#if BTN_COMBO_FUN_ENABLE
 /**
  * @brief Register a combo key
  *
@@ -148,11 +170,29 @@ void lite_button_init(key_id_e id, btn_gpio_lv_f gpio_cb,
  * @param para User parameter passed to callback
  */
 void lite_button_register_combos(key_combo_id_e id, const btn_combo_cfg_t *cfg, btn_combo_cb_f cb, void *para);
+#endif
+
+#if BTN_EXTI_FUN_ENABLE
+/**
+ * @brief Register timer
+ *
+ * @param cb   Timer callback function
+ */
+void lite_button_register_timer(btn_timer_cb_t *cb);
+
+/**
+ * @brief EXIT call
+ *
+ * @param cb   EXIT irq handle call function
+ */
+void lite_button_exti_trigger(key_id_e i);
+#else 
 
 /**
  * @brief Poll handler, should be called periodically
  */
 void lite_button_poll_handle(void);
+#endif
 
 #ifdef __cplusplus
 }

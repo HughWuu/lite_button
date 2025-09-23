@@ -34,7 +34,7 @@ extern "C" {
 /** Button debounce time in milliseconds */
 #define BTN_DEBOUNCE_MS      (20)
 /** Maximum interval for multi-click detection (ms) */
-#define BTN_MULTI_GAP_MS     (200)
+#define BTN_MULTI_GAP_MS     (400)
 /** Maximum interval between combo keys (ms) */
 #define BTN_COMBO_GAP_MS     (150)
 
@@ -42,6 +42,15 @@ extern "C" {
 #define BTN_LONGPRESS_FUN_ENABLE     (1)
 #define BTN_MULTICLICK_FUN_ENABLE    (1)
 #define BTN_COMBO_FUN_ENABLE         (1)
+#define BTN_EXTI_FUN_ENABLE          (1)
+
+#ifdef BTN_HW_INTERRUPT_DISABLE
+#define BTN_HW_INTERRUPT_DISABLE()    __disable_irq();
+#define BTN_HW_INTERRUPT_ENABLE()     __enable_irq();
+#else
+#define BTN_HW_INTERRUPT_DISABLE()  do {} while(0)
+#define BTN_HW_INTERRUPT_ENABLE()   do {} while(0)
+#endif
 
 /*==============================================================================
  * Key ID definitions

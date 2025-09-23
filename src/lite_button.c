@@ -21,10 +21,18 @@
 #include "lite_button.h"
 
 static size_t g_btn_tmr_tick = 0;
-static size_t g_btn_combo_num = 0;
 static uint32_t g_btn_press_mask = 0;
 static btn_dev_t g_btn_list[BTN_NUM] = {0};
+#if BTN_COMBO_FUN_ENABLE
+static size_t g_btn_combo_num = 0;
 static btn_combo_t g_btn_combo_list[BTN_COMBO_NUM] = {0};
+#endif
+#if BTN_EXTI_FUN_ENABLE
+static uint32_t g_btn_exti_mask = 0;
+static btn_timer_t g_btn_timer_handle = {NULL};
+
+void lite_button_poll_handle(void);
+#endif
 
 #if BTN_COMBO_FUN_ENABLE
 static size_t lite_button_combo_tick_diff(key_id_e *keys, btn_combo_num_e num)
@@ -40,7 +48,7 @@ static size_t lite_button_combo_tick_diff(key_id_e *keys, btn_combo_num_e num)
         return MAX3_DIFF(t0, t1, t2);
     }
 
-    return -1;
+    return SIZE_MAX;
 }
 
 static void lite_button_combo_handle(void)
@@ -75,8 +83,7 @@ static void lite_button_combo_handle(void)
 #if BTN_MULTICLICK_FUN_ENABLE
 static void lite_button_multi_click_handle(btn_dev_t *btn)
 {
-    uint32_t interval = (g_btn_tmr_tick >= btn->rel_tick)?
-                        (g_btn_tmr_tick - btn->rel_tick) : (0xFFFFFFFF - btn->rel_tick + g_btn_tmr_tick);
+    uint32_t interval = GET_INTERVAL(g_btn_tmr_tick, btn->rel_tick);
 
     if(interval <= BTN_MULTI_GAP_THR) {
         btn->click_cnt++;
@@ -108,50 +115,119 @@ static void lite_button_long_press_handle(btn_dev_t *btn)
 }
 #endif
 
-void lite_button_poll_handle(void)
+static void lite_button_state_update(key_combo_id_e i)
 {
     btn_dev_t *btn = NULL;
     btn_level_e cur_lv = BTN_IDLE_LEVEL;
 
-    g_btn_tmr_tick++;
-    for(size_t i = 0; i < BTN_NUM; i++) {
-        btn = &g_btn_list[i];
-        if (btn->cb == NULL || btn->gpio_cb == NULL) continue;
+    btn = &g_btn_list[i];
 
-        cur_lv = btn->gpio_cb();
-        // debounce
-        if(btn->state == cur_lv) {
+    if (btn->cb == NULL || btn->gpio_cb == NULL) return;
+
+    cur_lv = btn->gpio_cb();
+    // debounce
+    if(btn->state == cur_lv) {
+        btn->deb_cnt = 0;
+    } else {
+        btn->deb_cnt++;
+        if(btn->deb_cnt > BTN_DEBOUNCE_THR) {
+            // switch state
+            btn->state = cur_lv;
             btn->deb_cnt = 0;
-        } else {
-            btn->deb_cnt++;
-            if(btn->deb_cnt > BTN_DEBOUNCE_THR) {
-                // switch state
-                btn->state = cur_lv;
-                btn->deb_cnt = 0;
-                btn->lp_cnt = btn->cfg.lp_thr;
+            btn->lp_cnt = btn->cfg.lp_thr;
 
-                // button press
-                if(btn->state == BTN_ACTIVE_LEVEL) {
-                    g_btn_press_mask |= BIT(i);
-                    btn->prs_tick = g_btn_tmr_tick;
-                    btn->cb(BTN_EVT_PRESS, btn->cb_para);
-                }
-                // button release
-                if(btn->state != BTN_ACTIVE_LEVEL) {
-                    g_btn_press_mask &= ~BIT(i);
+            // button press
+            if(btn->state == BTN_ACTIVE_LEVEL) {
+                g_btn_press_mask |= BIT(i);
+                btn->prs_tick = g_btn_tmr_tick;
+                btn->cb(BTN_EVT_PRESS, btn->cb_para);
+            }
+            // button release
+            if(btn->state != BTN_ACTIVE_LEVEL) {
+                g_btn_press_mask &= ~BIT(i);
 #if BTN_MULTICLICK_FUN_ENABLE
-                    lite_button_multi_click_handle(btn);
+                lite_button_multi_click_handle(btn);
 #else
-                    btn->cb(BTN_EVT_RELEASE, btn->cb_para);
+                btn->cb(BTN_EVT_RELEASE, btn->cb_para);
 #endif
-                    btn->rel_tick = g_btn_tmr_tick;
-                }
+                btn->rel_tick = g_btn_tmr_tick;
             }
         }
+    }
 
-        // long press
+    // long press
 #if BTN_LONGPRESS_FUN_ENABLE
-        lite_button_long_press_handle(btn);
+    lite_button_long_press_handle(btn);
+#endif
+}
+
+#if BTN_EXTI_FUN_ENABLE
+
+static void lite_button_timer_creat(btn_timer_callback_cb_f cb)
+{
+    if (g_btn_timer_handle.cb.creat == NULL) return;
+    g_btn_timer_handle.cb.creat(cb);
+}
+
+static void lite_button_timer_stop(void)
+{
+    if (g_btn_timer_handle.cb.stop == NULL) return;
+    g_btn_timer_handle.cb.stop();
+    g_btn_timer_handle.run_flag = false;
+}
+
+static void lite_button_timer_start(uint32_t ms)
+{
+    if (g_btn_timer_handle.cb.start == NULL) return;
+    if (g_btn_timer_handle.run_flag) return;
+    g_btn_timer_handle.cb.start(ms);
+    g_btn_timer_handle.run_flag = true;
+}
+
+static void lite_button_timer_stop_check(key_id_e i)
+{
+    if (g_btn_list[i].state != BTN_ACTIVE_LEVEL) {
+        uint32_t interval = GET_INTERVAL(g_btn_tmr_tick, g_btn_timer_handle.exti_tick);
+        if (interval > BTN_MULTI_GAP_THR) {
+            BTN_HW_INTERRUPT_DISABLE();
+            g_btn_exti_mask &= ~BIT(i);
+            if (g_btn_exti_mask == 0) {
+                lite_button_timer_stop();
+            }
+            BTN_HW_INTERRUPT_ENABLE();
+        }
+    }
+}
+
+void lite_button_register_timer(btn_timer_cb_t *cb)
+{
+    if (cb == NULL) return;
+    g_btn_timer_handle.cb = *cb;
+    g_btn_timer_handle.run_flag = false;
+
+    lite_button_timer_creat(lite_button_poll_handle);
+}
+
+void lite_button_exti_trigger(key_id_e i)
+{
+    BTN_HW_INTERRUPT_DISABLE();
+    g_btn_exti_mask |= BIT(i);
+    lite_button_timer_start(BTN_POLL_PERIOD_MS);
+    BTN_HW_INTERRUPT_ENABLE();
+    g_btn_timer_handle.exti_tick = g_btn_tmr_tick;
+}
+#endif
+
+void lite_button_poll_handle(void)
+{
+    g_btn_tmr_tick++;
+    for(size_t i = 0; i < BTN_NUM; i++) {
+#if BTN_EXTI_FUN_ENABLE
+        if ((g_btn_exti_mask & BIT(i)) == 0) continue;
+#endif
+        lite_button_state_update(i);
+#if BTN_EXTI_FUN_ENABLE
+        lite_button_timer_stop_check(i);
 #endif
     }
 
@@ -161,6 +237,7 @@ void lite_button_poll_handle(void)
 #endif
 }
 
+#if BTN_COMBO_FUN_ENABLE
 void lite_button_register_combos(key_combo_id_e id, const btn_combo_cfg_t *cfg,
                                  btn_combo_cb_f cb, void *para)
 {
@@ -177,6 +254,7 @@ void lite_button_register_combos(key_combo_id_e id, const btn_combo_cfg_t *cfg,
         }
     }
 }
+#endif
 
 void lite_button_init(key_id_e id, btn_gpio_lv_f gpio_cb,
                       const btn_cfg_t *cfg, btn_cb_f cb, void *para)
