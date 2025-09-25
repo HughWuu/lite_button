@@ -10,7 +10,7 @@
  *   - Combo key support (simultaneous & sequential)(option)
  *
  * @author  HughWu
- * @date    2025-08-21
+ * @date    2025-08-16
  * @version 1.0
  */
 
@@ -199,3 +199,4 @@ void lite_button_poll_handle(void);
 #endif
 
 #endif // __LITE_BUTTON_H__
+
