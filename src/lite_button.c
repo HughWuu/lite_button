@@ -10,7 +10,7 @@
  *   - Combo keys(option)
  *
  * @author  HughWu
- * @date    2025-08-21
+ * @date    2025-08-16
  * @version 1.0
  *
  * @note
@@ -273,3 +273,4 @@ void lite_button_init(key_id_e id, btn_gpio_lv_f gpio_cb,
     g_btn_list[id].lp_cnt = 0;
     g_btn_list[id].click_cnt = 0;
 }
+
